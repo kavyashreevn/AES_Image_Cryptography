@@ -1,0 +1,263 @@
+r=1.95;
+xn = 0.516;
+for k=1:4
+    for i=1:256
+        for j=1:256
+            xn1 = r - (xn^2);
+            pn = round(mod(xn1 * 10^14 , 256));
+            xn= xn1;
+            if k==1
+            keyimage1(i, j) = pn;
+            elseif k == 2
+            keyimage2(i,j) =pn;
+            elseif k==3
+            keyimage3(i,j) =pn;
+            else
+            keyimage4(i,j)= pn;            end
+    end 
+end
+end 
+
+keyimage1 = uint8(keyimage1);
+keyimage2 = uint8(keyimage2);
+keyimage3 = uint8(keyimage3);
+keyimage4 = uint8(keyimage4);
+
+
+inputimage = imread("inputlena.png");
+imshow(inputimage)
+
+state = bitxor(keyimage1, inputimage);
+
+A= vectorA();
+
+keyarray = [keyimage2, keyimage3];
+
+
+for ke=1:2
+
+    st = subbytes(state);
+
+    sh = shiftrows(st);
+
+    mix = gf256_matrix_multiply_256(A, sh);
+
+    add= bitxor(keyarray(ke), uint8(mix));
+    
+    state=add;
+
+end 
+
+    statefinal = subbytes(state);
+
+    shiftfinal = shiftrows(statefinal);
+
+    addfinal= bitxor(keyimage4, uint8(mix));
+
+    cipherimage =addfinal;
+
+    imwrite(cipherimage, 'cipher_image2.png');
+   
+
+    imhist(cipherimage)
+
+   %ENTROPY
+
+     imageEntropy = entropy(cipherimage);
+
+     disp(['Entropy of the encrypted image: ', num2str(imageEntropy)]);
+    
+   %NPCR
+   
+C1 = imread('cipher_image.png'); 
+C2 = imread('cipher_image2.png'); 
+if size(C1) ~= size(C2)
+    		error('Images must be of the same size for NPCR calculation.');
+end
+D = C1 ~= C2;
+[rows, cols] = size(C1);
+NPCR = sum(D(:)) / (rows * cols) * 100;
+disp(['NPCR: ', num2str(NPCR), '%']);
+
+%UACI
+C1 = imread('cipher_image.png'); 
+C2 = imread('cipher_image2.png'); 
+
+C1 = double(C1);
+C2 = double(C2);
+
+
+if size(C1) ~= size(C2)
+    		error('Images must be of the same size for UACI calculation.');
+end
+
+
+[M, N] = size(C1);
+UACI = sum(sum(abs(C1 - C2))) / (M * N * 255) * 100;
+disp(['UACI: ', num2str(UACI), '%']);
+
+%CORRELATION ANALYSIS
+
+image = double(cipherimage);
+x = image(:, 1:end-1); 
+y = image(:, 2:end);  
+x = x(:);
+y = y(:);
+R_horizontal = corrcoef(x, y);
+disp(['Horizontal Correlation: ', num2str(R_horizontal(1, 2))]);
+
+
+x = image(1:end-1, :); 
+y = image(2:end, :);   
+x = x(:);
+y = y(:);
+R_vertical = corrcoef(x, y);
+disp(['Vertical Correlation: ', num2str(R_vertical(1, 2))]);
+
+
+x = image(1:end-1, 1:end-1); 
+y = image(2:end, 2:end);     
+x = x(:);
+y = y(:);
+R_diagonal = corrcoef(x, y);
+disp(['Diagonal Correlation: ', num2str(R_diagonal(1, 2))]);
+
+
+function state_out = subbytes(state_in)
+   
+    SBox = [
+        99 124 119 123 242 107 111 197 48 1 103 43 254 215 171 118;
+        202 130 201 125 250 89 71 240 173 212 162 175 156 164 114 192;
+        183 253 147 38 54 63 247 204 52 165 229 241 113 216 49 21;
+        4 199 35 195 24 150 5 154 7 18 128 226 235 39 178 117;
+        9 131 44 26 27 110 90 160 82 59 214 179 41 227 47 132;
+        83 209 0 237 32 252 177 91 106 203 190 57 74 76 88 207;
+        208 239 170 251 67 77 51 133 69 249 2 127 80 60 159 168;
+        81 163 64 143 146 157 56 245 188 182 218 33 16 255 243 210;
+        205 12 19 236 95 151 68 23 196 167 126 61 100 93 25 115;
+        96 129 79 220 34 42 144 136 70 238 184 20 222 94 11 219;
+        224 50 58 10 73 6 36 92 194 211 172 98 145 149 228 121;
+        231 200 55 109 141 213 78 169 108 86 244 234 101 122 174 8;
+        186 120 37 46 28 166 180 198 232 221 116 31 75 189 139 138;
+        112 62 181 102 72 3 246 14 97 53 87 185 134 193 29 158;
+        225 248 152 17 105 217 142 148 155 30 135 233 206 85 40 223;
+        140 161 137 13 191 230 66 104 65 153 45 15 176 84 187 22
+    ];
+
+    % Apply the S-box substitution to each byte in the state array
+    state_out = zeros(size(state_in), 'uint8');  % Initialize output state matrix
+    for row = 1:size(state_in, 1)
+        for col = 1:size(state_in, 2)
+            byte = state_in(row, col);  % Get the input byte
+            % Determine row and column indices in the S-box
+            row_idx = bitshift(byte, -4) + 1;  % Top 4 bits (0-15) + 1 for MATLAB indexing
+            col_idx = bitand(byte, 15) + 1;    % Bottom 4 bits (0-15) + 1 for MATLAB indexing
+            % Substitute the byte using the S-box
+            state_out(row, col) = SBox(row_idx, col_idx);
+        end
+    end
+end
+
+
+function shiftout = shiftrows(A)
+
+shift_amounts =  0:-1:-256; % Positive for right, negative for left
+
+% Initialize the result array
+shiftout = zeros(size(A));
+
+% Perform circular shift row by row
+for i = 1:size(A, 1)
+    shiftout(i, :) = circshift(A(i, :), shift_amounts(i));
+end
+end
+
+% multiplication constant vector:
+
+
+function mix = vectorA()
+
+rows = 256;
+cols = 256;
+
+% Generate the repeating pattern of natural numbers
+natural_numbers = repmat(1:256, 1, ceil(cols / 256)); % Repeat [1, 2, 3, 4] to cover all columns
+
+% Truncate to the required number of columns
+natural_numbers = natural_numbers(1:cols);
+
+% Repeat the row pattern for all rows to form the matrix
+for i = 1:rows
+    A(i, :) = circshift(natural_numbers, [0, i-1]); % Circularly shift by (i-1)
+end
+
+A(A == 256) = 1;
+
+mix = A;
+
+end
+
+function C = gf256_matrix_multiply_256(A, B)
+    % Multiplies two 256x256 matrices A and B in GF(2^8)
+    % A, B: 256x256 matrices in GF(2^8)
+    % C: 256x256 product matrix in GF(2^8)
+
+    % Ensure the number of columns of A equals the number of rows of B
+    [m, n] = size(A);
+    [n2, p] = size(B);
+    
+    if n ~= n2
+        error('Matrix dimensions must agree for multiplication.');
+    end
+    
+    % Initialize result matrix C as a 256x256 matrix of zeros
+    C = zeros(m, p);
+    
+    % Loop over rows of A and columns of B to calculate the matrix product
+    for i = 1:m
+        for j = 1:p
+            % Initialize the sum for this element
+            sum = 0;
+            
+            for k = 1:n
+                % Perform GF(2^8) multiplication and addition (XOR)
+                sum = bitxor(sum, gf256_multiply(A(i, k), B(k, j)));
+            end
+            
+            % Store the result
+            C(i, j) = sum;
+        end
+    end
+end
+
+function product = gf256_multiply(a, b)
+    % Multiplies two elements in GF(2^8) using polynomial multiplication and modulo reduction
+    % a, b: Elements in GF(2^8) (input as decimal or hexadecimal)
+    % product: Product of a and b in GF(2^8) (output as decimal)
+
+    % The irreducible polynomial used in AES: x^8 + x^4 + x^3 + x + 1
+    p = 0x11B; % The irreducible polynomial (0x11B is 1 + x + x^3 + x^4 + x^8)
+
+  % Initialize product as 0
+    product = 0;
+
+    % Loop over each bit of b
+    for i = 0:7
+        if bitget(b, i+1) == 1
+            % If the i-th bit of b is set, add a shifted by i to the product
+            product = bitxor(product, bitshift(a, i));
+        end
+    end
+
+    % Reduce the result modulo the irreducible polynomial (P(x) = x^8 + x^4 + x^3 + x + 1)
+    for i = 15:-1:8
+        if bitget(product, i+1) == 1
+            % Perform modulo reduction by XORing with the irreducible polynomial
+            product = bitxor(product, bitshift(p, i-8));
+        end
+    end
+
+    % Output the result in decimal
+    product = bitand(product, 255); % Make sure the result is in 8 bits (0 to 255)
+end
+
